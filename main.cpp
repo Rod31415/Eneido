@@ -1,14 +1,11 @@
-
 #include <stdio.h>
 #include <conio.h>
 #include <windows.h>
-#include <winuser.h>
 #include "dirent.h"
-#include <string>
 #include <fstream>
 #include <iostream>
-#include <sys/stat.h>
-//#include <direct.h>
+#include <string>
+
 
 #define up 72
 #define down 80
@@ -18,13 +15,22 @@
 #define esc 27
 #define del 8
 
-std::string LastFile;
 
+int backgroundColor=80;//48;
+int windowColor=223;
+int buttonColors=0;
+int scrollColor=15;
+
+
+std::string LastFile;
+CONSOLE_FONT_INFOEX cfi;
+
+
+short winHeight,winWidth;
 int mouseX = 0, mouseY = 0;
 HANDLE h;
 bool ButtonPressed = true;
 POINT p;
-int colorBackground = 48;
 
 
 
@@ -38,7 +44,6 @@ void replace(std::string& s,
             s[i] = c2;
 
     }
-    //return s;
 }
 
 
@@ -56,8 +61,8 @@ void gotoxy(unsigned int x, unsigned int y) {
 
 void background(unsigned int color)
 {
-    DWORD n,size;                   
-    COORD coord = { 0 };              
+    DWORD n,size;
+    COORD coord = { 0 };
     CONSOLE_SCREEN_BUFFER_INFO csbi;
 
     GetConsoleScreenBufferInfo(h, &csbi);
@@ -67,13 +72,13 @@ void background(unsigned int color)
     FillConsoleOutputCharacter(h, TEXT(' '), size, coord, &n);
     GetConsoleScreenBufferInfo(h, &csbi);
     FillConsoleOutputAttribute(h, csbi.wAttributes, size, coord, &n);
-    
+
 }
 
 void rect( int x,int y,  int width,  int height,unsigned int color) {
     std::string str( width-1, ' ' );
     SetConsoleTextAttribute(h, color);
-    for (int i = 0; i < height; i++) { 
+    for (int i = 0; i < height; i++) {
         gotoxy(x, y +i); printf("%s", str.c_str());
     }
 }
@@ -83,7 +88,7 @@ class Buttons {
 private:
     int x=0, y=0, width=0, height=0;
     std::string name;
-    
+
 public:
     int Selected=false ;
     int  color = 115;
@@ -98,7 +103,7 @@ public:
         this->name = name;
         this->color = 115;
     }
-    
+
     void drawButton() {
         SetConsoleTextAttribute(h, color);
         gotoxy(this->x, this->y);
@@ -135,6 +140,7 @@ private:
     std::ofstream fileOut;
     std::string *filestr;
     std::string files[100];
+    std::string disks[10];
     std::string fileSelected;
     std::string fileName;
     int totalHeight = 0;
@@ -145,19 +151,35 @@ public:
     this->fileSelected = "a.txt";
     this->totalHeight = 0;
     this->fileName;
+    this->disks;
     }
-    void WriteFile(int x,int y,int width,int height) {
+
+    void printFileLine(int line,int x,int y,int sel){
+        //gotoxy(x,y);
+        for(int i=0;i<this->filestr[line].length();i++){
+            gotoxy(x+i,y);
+            printf("%c",this->filestr[line].c_str()[i]);
+
+        }
+
+
+    }
+
+    void WriteFile(int x,int y,int width,int height,int totalWidth) {
+    SetConsoleTextAttribute(h, 112);
+        gotoxy(x+width,y-1);
+        printf(" ");
         SetConsoleTextAttribute(h, 15);
-        
+
         if (fileIn.is_open()) {
-            gotoxy( x+width, y ); printf("%s", this->fileName.c_str());
-            
-            
+
+            gotoxy( x+totalWidth, y ); printf("%s", this->fileName.c_str());
+
             for (int i = 0; i <height; i++) {
-                gotoxy(1 + x, y + i); printf("%s", this->filestr[i].c_str());
+                printFileLine(i,1+x,y+i,width);//printf("%s", this->filestr[i].c_str());
 
             }
-            SetConsoleTextAttribute(h, 118); gotoxy(x + width, y+2);
+            SetConsoleTextAttribute(h, 118); gotoxy(x + totalWidth, y+2);
             printf("Guardar");
             SetConsoleTextAttribute(h, 15);
             bool e = true;
@@ -165,6 +187,7 @@ public:
             int col = 0;
             bool clicked = false;
             bool press = false;
+
             while (e) {
                 if (GetAsyncKeyState(VK_LBUTTON) < 0) {
                     if (!press) { press = true; clicked = true; }
@@ -173,16 +196,20 @@ public:
                 else { press = false; }
                 if(clicked){
                     mouseCoord();
-                    if (collisionBtn(x + width, y + 2, 7, 1)) {
+                    if (collisionBtn(x + totalWidth, y + 2, 7, 1)) {
                         e = false;
                         ButtonPressed = false;
                         SetConsoleTextAttribute(h, 128);
+                        std::wcscpy(cfi.FaceName, L"Consolas");
+                        SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &cfi);
                         gotoxy(x+width, y+2);
                         printf("Guardar");
+                        //std::wcscpy(cfi.FaceName, L"Courier New");
+                        //SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &cfi);
                         SetConsoleTextAttribute(h, 15);
                         break;
                     }
-                    else if (collisionBtn(x, y, x + width, y + height)) {
+                    else if (collisionBtn(x, y, x + totalWidth, y + height)) {
                         row = mouseY - y;
                         if (this->filestr[row].length() < mouseX - x) { col = this->filestr[row].length()+1; }
                         else { col = mouseX-x; }
@@ -204,7 +231,7 @@ public:
                         }
                         else if (letter != -32 && letter != 77 && letter != 8) {
 
-                            gotoxy(x + width, y + 4); printf("%i   ", letter);
+                            gotoxy(x + totalWidth, y + 4); printf("%i   ", letter);
                             std::string correctletter = "";
                             correctletter = (char)letter;
                             this->filestr[row].insert(col - 1, correctletter);
@@ -213,39 +240,38 @@ public:
                             gotoxy(1 + x, y + row); printf("%s", this->filestr[row].c_str());
                         }
                         gotoxy(col + x, row + y);
-                    
-                    
+
+
                 }
-                
+
             }
             fileIn.close();
-            fileOut.open(this->fileSelected);
+            fileOut.open(this->fileSelected.c_str());
             for (int d = 0; d < height; d++) {
                 fileOut << this->filestr[d] << "\n";
             }
             fileOut.close();
-            fileIn.open(this->fileSelected);
+            fileIn.open(this->fileSelected.c_str());
             //Sleep(100);
             gotoxy(x+width/2, y + height); printf("Se ha guardado");
 
 
 
-
-
-
-
-
         }
         else { gotoxy(x, y + 1); printf("No hay ningun archivo abierto"); }
-        
 
+        std::wcscpy(cfi.FaceName, L"Consolas");
+        SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &cfi);
     }
+
     
 
     void openFile(int x, int y, int heightext,std::string dir) {
 
+        bool open = true;
+
         int maxFiles = 100;
-        int maxFilesPerScroll = 40;
+        int maxFilesPerScroll = winHeight-x-3;
         int scrollIndex = 0;
         int widthWindow = 120;
 
@@ -255,16 +281,33 @@ public:
         DIR* dr;
         struct stat info;
         struct dirent* en;
+
+        int distanceforx=4;
+
+
+        std::string nl;
+        int n=0;
+        int diskTotal;
+        for(int nletter=65;nletter<90;nletter++){
+            nl=(char)nletter;
+            nl+=":/";
+            if(opendir(nl.c_str())){
+                this->disks[n]=nl;
+                n++;
+            }
+            
+        }
+        diskTotal=n;
         
-        
+
          replace(dir,92,47);
         dir = dir + "/";
         dr = opendir(dir.c_str());
         char t[100] = "txt";
         char f[100] = "";
-        
 
-        rect(x, y, widthWindow, maxFilesPerScroll+2, 31);
+    
+        rect(x, y, widthWindow, maxFilesPerScroll+2, windowColor);
         if (dr) {
 
             while ((en = readdir(dr)) != NULL&&l < maxFiles) {
@@ -291,34 +334,56 @@ public:
 
         }
 
-        
+        float scrollBarInit = ((float)scrollIndex / l) * maxFilesPerScroll;
+                float scrollBarLength = ((float)maxFilesPerScroll / l) * maxFilesPerScroll;
+
+        if (scrollBarLength > maxFilesPerScroll) {scrollBarLength=maxFilesPerScroll;scrollBarInit=0;
+        }
+                       SetConsoleTextAttribute(h, 240);
+                       for (int i = 0; i < scrollBarLength; i++) {
+                           gotoxy(x+3, y + i + 2 + scrollBarInit); printf(" ");
+                       }
+                       SetConsoleTextAttribute(h, 31);
+                   
+
 
         std::string foulder=dir;
         bool ClickedLButton = false,ButtonDown=false;
 
 
         std::string fould =foulder;
-        gotoxy(x + 1, y+1);
-        SetConsoleTextAttribute(h, 115);
+        gotoxy(x + distanceforx, y+1);
+        SetConsoleTextAttribute(h, backgroundColor);
         printf("%s", dir.c_str());
-        SetConsoleTextAttribute(h, 31);
+        SetConsoleTextAttribute(h, windowColor);
         printf(" %c", 188);
+
+
 
         if (l > 0) {
             int n = maxFilesPerScroll;
             if (maxFilesPerScroll > l)n = l;
             for (int i = 0; i < n - 1; i++) {
-                gotoxy(x + 2, y + i + 2);
+                gotoxy(x + distanceforx+1, y + i + 2);
                 printf("%c%c> %s", 204, 205, this->files[i + scrollIndex].c_str());
 
             }
-            gotoxy(x + 2, y + n + 1);
+            gotoxy(x + distanceforx+1, y + n + 1);
             printf("%c%c> %s", 200, 205, this->files[n - 1 + scrollIndex].c_str());
         }
+        
+        for(int n=0;n<diskTotal;n++){
+            (n%2==0)?SetConsoleTextAttribute(h, windowColor):SetConsoleTextAttribute(h, backgroundColor);
+            gotoxy(x,n+y+2);
+                printf("%s",this->disks[n].c_str());  
+        }
+
         Sleep(200);
         bool key = false;
         bool ren = false;
         while (true) {
+
+            if (GetAsyncKeyState(VK_ESCAPE)) { open = false; break; }
 
 
             if (GetAsyncKeyState(VK_UP)&& scrollIndex > 0)
@@ -330,7 +395,7 @@ public:
             }
             else if (GetAsyncKeyState(VK_DOWN)&& (maxFilesPerScroll + scrollIndex < l))
             {
-                
+
                 scrollIndex++;
                 Sleep(10);
                 key = true;
@@ -346,43 +411,54 @@ public:
 
 
                if (l > 0) {
-                   rect(x, y+2, widthWindow, maxFilesPerScroll , 31);
+                   rect(x, y+2, widthWindow, maxFilesPerScroll , windowColor);
                    if (scrollBarLength > maxFilesPerScroll) {
-                       scrollBarLength = maxFilesPerScroll;
-                   }
-                       SetConsoleTextAttribute(h, 240);
-                       for (int i = 0; i < scrollBarLength; i++) {
-                           gotoxy(x, y + i + 2 + scrollBarInit); printf(" ");
-                       }
-                       SetConsoleTextAttribute(h, 31);
+                  // scrollBarLength=maxFilesPerScroll;
                    
+                       SetConsoleTextAttribute(h, scrollColor);
+                       for (int i = 0; i < scrollBarLength; i++) {
+                           gotoxy(x+3, y + i + 2 + scrollBarInit); printf(" ");
+                       
+                       }
+                       SetConsoleTextAttribute(h, windowColor);
+                   }
+
                    int n = maxFilesPerScroll;
                    if (maxFilesPerScroll > l)n = l;
                    for (int i = 0; i < n - 1; i++) {
-                       gotoxy(x + 2, y + i + 2);
+                       gotoxy(x +distanceforx+1, y + i + 2);
                        printf("%c%c> %s", 204, 205, this->files[i + scrollIndex].c_str());
 
                    }
-                   gotoxy(x + 2, y + n + 1);
+                   gotoxy(x +distanceforx+1, y + n + 1);
                    printf("%c%c> %s", 200, 205, this->files[n - 1 + scrollIndex].c_str());
+
+                   
                }
+
+               for(int n=0;n<diskTotal;n++){
+                (n%2==0)?SetConsoleTextAttribute(h, windowColor):SetConsoleTextAttribute(h, backgroundColor);
+            gotoxy(x,n+y+2);
+                printf("%s",this->disks[n].c_str());  
+        }
                ren = false;
                key = false;
 
            }
 
             mouseCoord();
+
             if (GetKeyState(VK_LBUTTON)>0) {
                 if (!ButtonDown) { ClickedLButton = true; }
                 if (ButtonDown) { ClickedLButton = false; }
                 ButtonDown = true;
             }
             else { ButtonDown = false; }
-            
+
             if(ClickedLButton){
 
-                if (mouseY - y - 2 >-1&& mouseY - y - 2 < l) {
-                    
+                if (mouseY - y - 2 >-1&& mouseY - y - 2 < l&&mouseX>x+distanceforx+2) {
+
 
                     this->fileSelected = foulder + this->files[mouseY - y - 2 + scrollIndex];
 
@@ -405,7 +481,7 @@ public:
                         char s[100] = "txt";
                         int searched;
 
-                        rect(x, y, widthWindow, maxFilesPerScroll+2, 31);
+                        rect(x, y, widthWindow, maxFilesPerScroll+2, windowColor);
 
                         l = 0;
                         if (dr) {
@@ -434,31 +510,36 @@ public:
 
                         }
                         std::string fould = foulder;
-                        gotoxy(x + 1, y + 1);
-                        SetConsoleTextAttribute(h, 115);
+                        gotoxy(x +distanceforx, y + 1);
+                        SetConsoleTextAttribute(h, backgroundColor);
                         printf("%s", foulder.c_str());
-                        SetConsoleTextAttribute(h, 31);
+                        SetConsoleTextAttribute(h, windowColor);
                         printf(" %c", 188);
 
                         if (l > 0) {
                             int n = maxFilesPerScroll;
                             if (maxFilesPerScroll > l)n = l;
                             for (int i = 0; i < n - 1; i++) {
-                                gotoxy(x + 2, y + i + 2);
+                                gotoxy(x + distanceforx+1, y + i + 2);
                                 printf("%c%c> %s", 204, 205, this->files[i+scrollIndex].c_str());
 
                             }
 
-                            gotoxy(x + 2, y + n + 1);
+                            gotoxy(x + distanceforx+1, y + n + 1);
                             printf("%c%c> %s", 200, 205, this->files[n - 1 + scrollIndex].c_str());
 
                         }
+                        for(int n=0;n<diskTotal;n++){
+                            (n%2==0)?SetConsoleTextAttribute(h, windowColor):SetConsoleTextAttribute(h, backgroundColor);
+                        gotoxy(x,n+y+2);
+                        printf("%s",this->disks[n].c_str());  
+                    }
                     }
 
 
 
                 }
-                else if(collisionBtn(x+2+foulder.length(),y+1,1,1)){
+                else if(collisionBtn(x+distanceforx+foulder.length()+1,y+1,1,1)&&foulder.length()>3){
                     scrollIndex = 0;
                     ren = true;
                     int n = 0;
@@ -474,15 +555,14 @@ public:
                         }
                         if (n == 2) { break; }
                     }
-                    
+
 
 
 
                     dr = opendir(foulder.c_str());
                     char s[100] = "txt";
-                    int searched;
 
-                    rect(x, y, widthWindow, maxFilesPerScroll+2, 31);
+                    rect(x, y, widthWindow, maxFilesPerScroll+2, windowColor);
 
                     l = 0;
                     if (dr) {
@@ -493,7 +573,7 @@ public:
                             ptr2 = strtok(NULL, ".");
                             if (ptr2 != NULL)
                             {
-                                searched = strcmp(ptr2, s);
+                                int searched = strcmp(ptr2, s);
                                 if (searched == 0)
                                 {
 
@@ -511,45 +591,96 @@ public:
 
                     }
                     std::string fould = foulder;
-                    gotoxy(x + 1, y + 1);
-                    SetConsoleTextAttribute(h, 115);
+                    gotoxy(x + distanceforx, y + 1);
+                    SetConsoleTextAttribute(h, backgroundColor);
                     printf("%s", foulder.c_str());
-                    SetConsoleTextAttribute(h, 31);
+                    SetConsoleTextAttribute(h, windowColor);
                     printf(" %c", 188);
 
                     if (l > 0) {
                         int n = maxFilesPerScroll;
                         if (maxFilesPerScroll > l){n = l;}
                         for (int i = 0; i < n - 1; i++) {
-                            gotoxy(x + 2, y + i + 2);
+                            gotoxy(x +distanceforx+1, y + i + 2);
                             printf("%c%c> %s", 204, 205, this->files[i + scrollIndex].c_str());
 
                         }
 
-                        gotoxy(x + 2, y + n + 1);
+                        gotoxy(x + +distanceforx+1, y + n + 1);
                         printf("%c%c> %s", 200, 205, this->files[n - 1 + scrollIndex].c_str());
 
                     }
                 }
+                else if(collisionBtn(x,y+2,3,diskTotal)){
+                scrollIndex=0;
+                    foulder=this->disks[mouseY-y-2];
+                    dr=opendir(foulder.c_str());
+                    char s[100] = "txt";
+                    l=0;
+                    rect(x+distanceforx,y+1,widthWindow-distanceforx,maxFilesPerScroll+1,windowColor);
+                    if(dr){
+                        while((en=readdir(dr))!=NULL&&l< maxFiles){
+                            ptr1 = strtok(en->d_name, ".");
+                            ptr2 = strtok(NULL, ".");
+                            if (ptr2 != NULL)
+                            {
+                                int searched = strcmp(ptr2, s);
+                                if (searched == 0)
+                                {
 
-               
-                
+                                    this->files[l] = (convert(en->d_name) + ".txt");
+                                    l++;
+                                }
+                            }
+                            else if (convert(en->d_name) != ".." && convert(en->d_name) != ".") {
+                                this->files[l] = convert(en->d_name);
+                                l++;
+                            }
+                        }
+                        closedir(dr);
+                    }
+
+                    std::string fould = foulder;
+                    gotoxy(x + distanceforx, y + 1);
+                    SetConsoleTextAttribute(h, backgroundColor);
+                    printf("%s", foulder.c_str());
+                    SetConsoleTextAttribute(h, windowColor);
+                    printf(" %c", 188);
+
+                    if (l > 0) {
+                        int n = maxFilesPerScroll;
+                        if (maxFilesPerScroll > l){n = l;}
+                        for (int i = 0; i < n - 1; i++) {
+                            gotoxy(x + distanceforx+1, y + i + 2);
+                            printf("%c%c> %s", 204, 205, this->files[i + scrollIndex].c_str());
+
+                        }
+
+                        gotoxy(x + distanceforx+1, y + n + 1);
+                        printf("%c%c> %s", 200, 205, this->files[n - 1 + scrollIndex].c_str());
+
+                    }
+
+                }
+
+
+
             }
 
 
         }
-       
-        this->totalHeight = 0;
+        if (open) {
+            this->totalHeight = 0;
 
-        this->filestr = new std::string[100];
-        fileIn.open(this->fileSelected);
+            this->filestr = new std::string[100];
+            fileIn.open(this->fileSelected.c_str(),std::ios::binary);
 
-        while (!fileIn.eof() && this->totalHeight < heightext) {
-            std::getline(fileIn, this->filestr[this->totalHeight]);
-            ++this->totalHeight;
+            while (!fileIn.eof() && this->totalHeight < heightext) {
+                std::getline(fileIn, this->filestr[this->totalHeight]);
+                ++this->totalHeight;
+            }
         }
-            
-        
+
     }
 
     void newFile(int x,int y) {
@@ -576,23 +707,23 @@ File actualfile;
 
 void FileAction(int n) {
     mouseCoord();
-    
+
     int t = 0;
     for (int i = 0; i < n; i++) {
         subbFile[i].collision(mouseX, mouseY);
-        
+
         if (subbFile[i].Selected) {
             t++;
             switch (i) {
             case 0: actualfile.newFile(10, 10); break;
-            case 1:  char cwd[256]; LastFile = "C:" + (char)47;/*_getcwd(cwd, sizeof(cwd));*/ if (LastFile == "") { LastFile = std::string(cwd); } actualfile.openFile(15, 5, 100, "C:");
+            case 1:  char cwd[256]; std::string a = "C:" ;/*_getcwd(cwd, sizeof(cwd));*/ if (LastFile =="") { LastFile = a; } actualfile.openFile(15, 5, 100, LastFile);
                 break;
             }
             break;
         }
     }
    if(t==0){
-        ButtonPressed = true;  background(colorBackground); for (int i = 0; i < TotalButton; i++) { b[i].Selected = false; b[i].drawButton(); }
+        ButtonPressed = true;  background(backgroundColor); for (int i = 0; i < TotalButton; i++) { b[i].Selected = false; b[i].drawButton(); }
     }
 }
 
@@ -612,13 +743,13 @@ void ProgramAction(int n) {
     }
 
     if (t == 0) {
-        ButtonPressed = true;  background(colorBackground); for (int i = 0; i < TotalButton; i++) { b[i].Selected = false; b[i].drawButton(); }
+        ButtonPressed = true;  background(backgroundColor); for (int i = 0; i < TotalButton; i++) { b[i].Selected = false; b[i].drawButton(); }
     }
 
 }
 
 void functions(int selected) {
-    
+
     bool ButtonDown = true;
     bool clicked = false;
 
@@ -632,9 +763,11 @@ void functions(int selected) {
                 subbFile[i].drawButton();
             }
             for (int j = 0; j < TotalButton; j++) { b[j].drawButton(); }
-            
+
             while (ButtonPressed==false) {
-               
+
+                //if (GetAsyncKeyState(VK_ESCAPE)) { ButtonPressed = true; }
+
                 if (GetAsyncKeyState(VK_LBUTTON) < 0) {
                     if (!ButtonDown) { ButtonDown = true; clicked = true; }
                     else { clicked = false; }
@@ -646,8 +779,8 @@ void functions(int selected) {
                 }
 
             }
-            
-            
+
+
         break;
     case 2:
             rect(0, 1, 14, 10, 14);
@@ -663,21 +796,32 @@ void functions(int selected) {
                 }
             }
                 break;
-        
+
     }
-    
-    
+
+
 }
 
 
 
 
 
-int zoneX=15, zoneY=5, zoneWidth=60, zoneHeight = 40;
+int zoneX=15, zoneY=5, zoneWidth=60, zoneHeight = 39, totalZoneWidth=128;
 
-int main(int argc, char argv[]) {
+int main(int argc, char **argv) {
 
-    h = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    h = GetStdHandle((DWORD)-11);
+
+    cfi.cbSize = sizeof(cfi);
+    cfi.nFont = 0;
+    cfi.dwFontSize.X = 0;
+    cfi.dwFontSize.Y = 16;
+    cfi.FontFamily = FF_DONTCARE;
+    cfi.FontWeight = FW_NORMAL;
+    std::wcscpy(cfi.FaceName, L"Consolas");
+    SetCurrentConsoleFontEx(h, FALSE, &cfi);
+
 
     HANDLE hInput = CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     DWORD prev_mode;
@@ -689,8 +833,9 @@ int main(int argc, char argv[]) {
 
     CONSOLE_SCREEN_BUFFER_INFO scrBufferInfo;
     GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &scrBufferInfo);
-    short winWidth = scrBufferInfo.srWindow.Right - scrBufferInfo.srWindow.Left + 1;
-    short winHeight = scrBufferInfo.srWindow.Bottom - scrBufferInfo.srWindow.Top + 1;
+    winWidth = scrBufferInfo.srWindow.Right - scrBufferInfo.srWindow.Left + 1;
+    winHeight = scrBufferInfo.srWindow.Bottom - scrBufferInfo.srWindow.Top + 1;
+    zoneHeight=winHeight-zoneY;
     short scrBufferWidth = scrBufferInfo.dwSize.X;
     short scrBufferHeight = scrBufferInfo.dwSize.Y;
     COORD newSize;
@@ -717,11 +862,12 @@ int main(int argc, char argv[]) {
 
         bool ButtonDown = false;
         bool clicked = false;
-    background(colorBackground);
-    actualfile.WriteFile(zoneX, zoneY, zoneWidth, zoneHeight);
+    background(backgroundColor);
+    actualfile.WriteFile(zoneX, zoneY, zoneWidth, zoneHeight,totalZoneWidth);
     for (int i = 0; i < TotalButton; i++) {
         b[i].drawButton();
     }
+    printf("%i",winHeight);
     while (true) {
         //Sleep(10);
         if (GetAsyncKeyState(VK_LBUTTON) < 0 && ButtonPressed) {
@@ -735,33 +881,34 @@ int main(int argc, char argv[]) {
         }
         if(clicked){
             mouseCoord();
-            background(colorBackground);
-            
+            background(backgroundColor);
+
             for (int i = 0; i < TotalButton; i++) {
-                
-                
+
+
                 b[i].collision(mouseX, mouseY);
                 if (b[i].Selected) {
-                    ButtonPressed = false; 
+                    ButtonPressed = false;
                     gotoxy(50, 0);
                     printf("%i", i);
                     functions(i + 1);
-                   
+
                 }
-                
-                
+
+
             }
-            
+
             for (int j = 0; j < TotalButton; j++) { b[j].drawButton(); }
-            rect(zoneX, zoneY, zoneWidth, zoneHeight,15);
-            actualfile.WriteFile(zoneX, zoneY, zoneWidth, zoneHeight);
+            rect(zoneX, zoneY, totalZoneWidth, zoneHeight,15);
+            actualfile.WriteFile(zoneX, zoneY, zoneWidth, zoneHeight,totalZoneWidth);
+            
             gotoxy(50, 1);
             printf("%i", clicked);
             clicked = false;
             ButtonPressed = true;
-            
+
         }
 
     }
-	
+
 }
